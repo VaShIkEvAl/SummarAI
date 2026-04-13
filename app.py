@@ -2,12 +2,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 from services.gemini_service import generate_summary
 from utils.text_loader import load_text_from_file
+import json
+import re
+
+def get_safe_text(text):
+    return json.dumps(text)
 
 st.set_page_config(page_title="SummarAI", page_icon="🧠", layout="wide")
 
 # ---------------- SESSION STATE ----------------
-if "summary" not in st.session_state:
-    st.session_state.summary = ""
+if "summary_data" not in st.session_state:
+    st.session_state.summary_data = {}
 
 # ---------------- LOAD CSS ----------------
 def load_css():
@@ -46,43 +51,150 @@ if st.button("🚀 Generate Summary"):
         print("🤖 Sending data to Gemini...")
 
         with st.spinner("Generating summary..."):
-            st.session_state.summary = generate_summary(chat_text)
+            st.session_state.summary_data = generate_summary(chat_text)
 
         st.success("✅ Summary generated!")
 
 # ---------------- DISPLAY SUMMARY ----------------
-summary = st.session_state.summary
+data = st.session_state.summary_data
+summary_text = data.get("summary", "")
+key_points = data.get("key_points", [])
+action_items = data.get("action_items", [])
 
-if summary:
-    st.markdown("## 📄 Summary")
 
-    col1, col2 = st.columns([1, 1])
+full_output = f"""Summary:
+{summary_text}
 
-    # LEFT → Copy section title
+Key Points:
+""" + "\n".join(f"- {kp}" for kp in key_points) + f"""
+
+Action Items:
+""" + "\n".join(f"- {ai}" for ai in action_items)
+
+def copy_to_clipboard(text, label):
+    st.code(text, language="text")
+    st.toast(f"✅ {label} copied! (Use Ctrl+C)", icon="📋")
+
+def clean_filename(text):
+    text = re.sub(r'[\\/*?:"<>|]', "", text)
+    text = text.replace(" ", "_")
+    return text[:50]
+
+def render_copy_button(text, key):
+    safe_text = get_safe_text(text)
+
+    copy_html = f"""
+    <button id="copyBtn_{key}" onclick="copyText_{key}()" 
+    style="
+        background-color:#4CAF50;
+        color:white;
+        padding:6px 12px;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;
+    ">
+        📋
+    </button>
+
+    <script>
+    function copyText_{key}() {{
+        const text = {safe_text};
+        const btn = document.getElementById("copyBtn_{key}");
+
+        navigator.clipboard.writeText(text).then(function() {{
+            btn.innerText = "✅";
+            btn.style.backgroundColor = "#2ecc71";
+
+            setTimeout(() => {{
+                btn.innerText = "📋";
+                btn.style.backgroundColor = "#4CAF50";
+            }}, 1500);
+        }});
+    }}
+    </script>
+    """
+
+    components.html(copy_html, height=40)
+
+if data:
+    title = data.get("title", "summary")
+
+    file_name = f"{clean_filename(title)}_summary.txt"
+
+    # Prepare safe text
+    safe_summary = get_safe_text(summary_text)
+
+    # HEADER ROW
+    col1, col2 = st.columns([6, 2])
+
     with col1:
-        st.markdown("### 📋 Copy Summary")
+        st.markdown("## 📄 Summary")
 
-    # RIGHT → Download button
     with col2:
-        st.download_button(
-            label="⬇️ Download Summary",
-            data=summary,
-            file_name="summary.txt",
-            mime="text/plain"
-        )
+        btn1, btn2 = st.columns(2)
 
-    # Wrapped text display
-    st.text_area(
-        label="Summary Output",
-        value=summary,
-        height=200,
-        label_visibility="collapsed"
-    )
+        # Copy button (JS)
+        with btn1:
+            render_copy_button(summary_text, "summary")
+
+        # Download button
+        with btn2:
+            st.download_button(
+                label="⬇️ Download",
+                data=full_output,
+                file_name=file_name,
+                mime="text/plain"
+            )
+
+    # CONTENT
+    st.markdown(summary_text)
+
+    # st.markdown("## 📌 Key Points")
+
+    key_points_text = "\n".join(f"- {kp}" for kp in key_points)
+
+    safe_kp = get_safe_text(key_points_text)
+
+    col1, col2 = st.columns([6, 2])
+
+    with col1:
+        st.markdown("## 📌 Key Points")
+
+    with col2:
+        render_copy_button(key_points_text, "kp")
+
+    # CONTENT
+    if key_points:
+        st.markdown(key_points_text)
+    else:
+        st.info("No key points found.")
+
+    # st.markdown("## ✅ Action Items")
+
+    action_items_text = "\n".join(f"- {ai}" for ai in action_items)
+
+    safe_ai = get_safe_text(action_items_text)
+
+    col1, col2 = st.columns([6, 2])
+
+    with col1:
+        st.markdown("## ✅ Action Items")
+
+    with col2:
+        render_copy_button(action_items_text, "ai")
+
+    # CONTENT
+    if action_items:
+        st.markdown(action_items_text)
+    else:
+        st.info("No action items found.")
 
     # ---------------- COPY TO CLIPBOARD BUTTON ----------------
+    safe_text = json.dumps(full_output)
+
     copy_button_html = f"""
     <div style="margin-top:10px;">
-        <button onclick="navigator.clipboard.writeText(`{summary}`)" 
+        <button id="copyBtn" onclick="copyText()" 
         style="
             background-color:#4CAF50;
             color:white;
@@ -95,6 +207,23 @@ if summary:
             📋 Copy to Clipboard
         </button>
     </div>
+
+    <script>
+    function copyText() {{
+        const text = {safe_text};
+        const btn = document.getElementById("copyBtn");  // ✅ FIX
+
+        navigator.clipboard.writeText(text).then(function() {{
+            btn.innerText = "✅ Copied";
+            btn.style.backgroundColor = "#2ecc71";
+
+            setTimeout(() => {{
+                btn.innerText = "📋 Copy to Clipboard";
+                btn.style.backgroundColor = "#4CAF50";
+            }}, 1500);
+        }});
+    }}
+    </script>
     """
 
     components.html(copy_button_html, height=60)
