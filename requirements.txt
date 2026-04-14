@@ -1,3 +1,7 @@
 streamlit
-python-dotenv
+sounddevice
+numpy
+scipy
+openai-whisper
 google-generativeai
+python-dotenv
