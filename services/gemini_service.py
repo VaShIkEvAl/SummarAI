@@ -161,3 +161,49 @@ def generate_summary(chat_text):
     print("🟢 Final structured response ready!")
 
     return final_data
+
+def answer_all_questions(summary, questions):
+    questions_text = "\n".join([
+        f"Q{i+1}: {q}" for i, q in enumerate(questions)
+    ])
+
+    prompt = f"""
+    You are an intelligent assistant.
+
+    Based on the summary below, answer ALL the questions.
+
+    Summary:
+    {summary}
+
+    Questions:
+    {questions_text}
+
+    Instructions:
+    - Answer every question
+    - Keep answers concise and accurate
+    - Do NOT skip any question
+    - Do NOT add explanations outside the JSON
+
+    IMPORTANT:
+    Return output ONLY in valid JSON format.
+
+    Output format:
+    [
+    {{"question": "Question 1", "answer": "Answer 1"}},
+    {{"question": "Question 2", "answer": "Answer 2"}}
+    ]
+
+    Rules:
+    - Use double quotes (")
+    - No trailing commas
+    - No extra text before or after JSON
+    - Ensure valid JSON that can be parsed using json.loads()
+    - If a question cannot be answered from the summary, use "answer": "Not found in summary"
+    """
+
+    model = genai.GenerativeModel(MODEL_NAME)
+
+    print("Gemini API call to generate answers")
+    response = model.generate_content(prompt)
+    print("Final Answers generated")
+    return response.text.strip()

@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from services.gemini_service import generate_summary
+from services.gemini_service import answer_all_questions
 from utils.text_loader import load_text_from_file
 import json
 import re
@@ -65,6 +66,15 @@ if "transcribed_text" not in st.session_state:
 if "chat_text" not in st.session_state:
     st.session_state.chat_text = ""
 
+if "questions" not in st.session_state:
+    st.session_state.questions = []
+
+if "qa_results" not in st.session_state:
+    st.session_state.qa_results = []  
+
+if "question_input" not in st.session_state:
+    st.session_state.question_input = ""
+
 # ---------------- LOAD CSS ----------------
 def load_css():
     with open("styles/style.css") as f:
@@ -111,6 +121,17 @@ with col2:
         else:
             st.warning("Not recording!")
 
+uploaded_file = st.file_uploader("Or upload a .txt file", type=["txt"])
+
+if uploaded_file is not None:
+    st.info("📂 Uploaded file detected. Processing...")
+    print("📂 Uploaded file detected in UI")
+
+    file_text = load_text_from_file(uploaded_file)
+
+    # 🔥 Store in session state
+    st.session_state.chat_text = file_text
+
 st.markdown("## 📥 Input Chat")
 text_input = st.text_area(
     "Paste your chat here:",
@@ -121,16 +142,9 @@ text_input = st.text_area(
 # 🔥 Sync user edits
 # st.session_state.chat_text = text_input
 
-uploaded_file = st.file_uploader("Or upload a .txt file", type=["txt"])
 
 chat_text = st.session_state.get("chat_text", "")
 
-if uploaded_file is not None:
-    st.info("📂 Uploaded file detected. Processing...")
-    print("📂 Uploaded file detected in UI")
-    chat_text = load_text_from_file(uploaded_file)
-elif text_input and not st.session_state.is_recording:
-    chat_text = text_input
 
 # ---------------- ALWAYS SHOW TRANSCRIPTION ----------------
 if st.session_state.transcribed_text:
@@ -308,3 +322,65 @@ if data:
     """
 
     components.html(copy_button_html, height=60)
+
+    st.subheader("Add Questions")
+
+    # -------- Callback function --------
+    def add_question():
+        q = st.session_state.question_input.strip()
+        if q:
+            st.session_state.questions.append(q)
+
+            # Clear input safely
+            st.session_state.question_input = ""
+
+            # Reset answers
+            st.session_state.qa_results = []
+
+    # -------- Single input box --------
+    st.text_input(
+        "Enter a question:",
+        key="question_input",
+        placeholder="Type and click Add Question..."
+    )
+
+    # -------- Button with callback --------
+    st.button("Add Question", on_click=add_question)
+
+    if st.session_state.questions:
+        st.subheader("Your Questions")
+
+        for i, q in enumerate(st.session_state.questions):
+            st.write(f"Q{i+1}: {q}")
+
+    if st.button("Generate Answers"):
+        if full_output and st.session_state.questions:
+
+            with st.spinner("🤖 Gemini is generating answers..."):
+
+                response_text = answer_all_questions(
+                    full_output,
+                    st.session_state.questions
+                )
+
+                # Clean markdown if Gemini adds it
+                response_text = response_text.strip()
+                if response_text.startswith("```"):
+                    response_text = response_text.strip("```")
+                    response_text = response_text.replace("json", "", 1).strip()
+
+                # Parse JSON
+                try:
+                    st.session_state.qa_results = json.loads(response_text)
+                    st.success("✅ Answers generated successfully!")
+                except:
+                    st.error("❌ Failed to parse response. Try again.")
+                    st.session_state.qa_results = []
+
+    if st.session_state.qa_results:
+        st.subheader("Answers")
+
+        for i, qa in enumerate(st.session_state.qa_results):
+            st.markdown(f"### Q{i+1}: {qa['question']}")
+            st.markdown(f"**A:** {qa['answer']}")
+            st.markdown("---")
