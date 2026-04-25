@@ -1,13 +1,17 @@
+import os
 import streamlit as st
+
+IS_CLOUD = os.getenv("STREAMLIT_SERVER_PORT") is not None
+
 import streamlit.components.v1 as components
 from services.gemini_service import generate_summary
 from services.gemini_service import answer_all_questions
 from utils.text_loader import load_text_from_file
 import json
 import re
-from audio_processing.recorder import Recorder
+if not IS_CLOUD:
+    from audio_processing.recorder import Recorder
 from audio_processing.transcriber import transcribe_audio
-import os
 
 def render_copy_button(text, key):
     safe_text = get_safe_text(text)
@@ -54,7 +58,7 @@ st.set_page_config(page_title="SummarAI", page_icon="🧠", layout="wide")
 if "summary_data" not in st.session_state:
     st.session_state.summary_data = {}
 
-if "recorder" not in st.session_state:
+if not IS_CLOUD and "recorder" not in st.session_state:
     st.session_state.recorder = Recorder()
 
 if "is_recording" not in st.session_state:
@@ -89,37 +93,56 @@ st.markdown('<div class="sub-title">AI-powered Chat Summarizer</div>', unsafe_al
 # ---------------- INPUT SECTION ----------------
 st.markdown("## 🎤 Record Conversation")
 
-col1, col2 = st.columns(2)
+if IS_CLOUD:
+    # Streamlit Cloud compatible audio input
+    audio_file = st.audio_input("🎙️ Record your conversation")
 
-with col1:
-    if st.button("🎙️ Start Recording"):
-        if not st.session_state.is_recording:
-            st.session_state.recorder.start()
-            st.session_state.is_recording = True
-            st.success("🎙️ Recording started...")
-        else:
-            st.warning("Already recording!")
+    if audio_file is not None:
+        with open("conversation.wav", "wb") as f:
+            f.write(audio_file.getbuffer())
 
-with col2:
-    if st.button("⏹️ Stop Recording"):
-        if st.session_state.is_recording:
-            file_path = st.session_state.recorder.stop()
-            st.session_state.is_recording = False
-            st.info("🛑 Recording stopped. Transcribing...")
+        st.info("🛑 Recording completed. Transcribing...")
 
-            # 🔥 Transcription
-            with st.spinner("Converting speech to text..."):
-                transcribed_text = transcribe_audio(file_path)
+        with st.spinner("Converting speech to text..."):
+            transcribed_text = transcribe_audio("conversation.wav")
 
-            # 🔥 Inject into chat input
-            chat_text = transcribed_text
+        chat_text = transcribed_text
+        st.session_state.chat_text = transcribed_text
+        st.session_state.transcribed_text = transcribed_text
 
-            st.session_state.chat_text = transcribed_text
-            st.session_state.transcribed_text = transcribed_text
+        st.success("✅ Transcription complete!")
+else:
+    col1, col2 = st.columns(2)
 
-            st.success("✅ Transcription complete!")
-        else:
-            st.warning("Not recording!")
+    with col1:
+        if st.button("🎙️ Start Recording"):
+            if not st.session_state.is_recording:
+                st.session_state.recorder.start()
+                st.session_state.is_recording = True
+                st.success("🎙️ Recording started...")
+            else:
+                st.warning("Already recording!")
+
+    with col2:
+        if st.button("⏹️ Stop Recording"):
+            if st.session_state.is_recording:
+                file_path = st.session_state.recorder.stop()
+                st.session_state.is_recording = False
+                st.info("🛑 Recording stopped. Transcribing...")
+
+                # 🔥 Transcription
+                with st.spinner("Converting speech to text..."):
+                    transcribed_text = transcribe_audio(file_path)
+
+                # 🔥 Inject into chat input
+                chat_text = transcribed_text
+
+                st.session_state.chat_text = transcribed_text
+                st.session_state.transcribed_text = transcribed_text
+
+                st.success("✅ Transcription complete!")
+            else:
+                st.warning("Not recording!")
 
 uploaded_file = st.file_uploader("Or upload a .txt file", type=["txt"])
 
