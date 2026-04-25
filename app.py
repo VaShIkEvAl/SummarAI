@@ -1,17 +1,18 @@
-import os
-import streamlit as st
-
-IS_CLOUD = os.getenv("STREAMLIT_SERVER_PORT") is not None
-
 import streamlit.components.v1 as components
 from services.gemini_service import generate_summary
 from services.gemini_service import answer_all_questions
 from utils.text_loader import load_text_from_file
 import json
 import re
-if not IS_CLOUD:
+try:
     from audio_processing.recorder import Recorder
+    AUDIO_AVAILABLE = True
+except Exception:
+    AUDIO_AVAILABLE = False
 from audio_processing.transcriber import transcribe_audio
+import streamlit as st
+
+# AUDIO_AVAILABLE = False
 
 def render_copy_button(text, key):
     safe_text = get_safe_text(text)
@@ -58,7 +59,7 @@ st.set_page_config(page_title="SummarAI", page_icon="🧠", layout="wide")
 if "summary_data" not in st.session_state:
     st.session_state.summary_data = {}
 
-if not IS_CLOUD and "recorder" not in st.session_state:
+if AUDIO_AVAILABLE and "recorder" not in st.session_state:
     st.session_state.recorder = Recorder()
 
 if "is_recording" not in st.session_state:
@@ -93,24 +94,34 @@ st.markdown('<div class="sub-title">AI-powered Chat Summarizer</div>', unsafe_al
 # ---------------- INPUT SECTION ----------------
 st.markdown("## 🎤 Record Conversation")
 
-if IS_CLOUD:
+if not AUDIO_AVAILABLE:
     # Streamlit Cloud compatible audio input
     audio_file = st.audio_input("🎙️ Record your conversation")
 
     if audio_file is not None:
-        with open("conversation.wav", "wb") as f:
+        st.info("🛑 Recording completed. Transcribing...")
+        
+        filename = audio_file.name
+
+        with open(filename, "wb") as f:
             f.write(audio_file.getbuffer())
 
-        st.info("🛑 Recording completed. Transcribing...")
-
         with st.spinner("Converting speech to text..."):
-            transcribed_text = transcribe_audio("conversation.wav")
+            transcribed_text = transcribe_audio(filename)
+
+        # with open("conversation.wav", "wb") as f:
+        #     f.write(audio_file.getbuffer())
+
+
+        # with st.spinner("Converting speech to text..."):
+        #     transcribed_text = transcribe_audio("conversation.wav")
 
         chat_text = transcribed_text
         st.session_state.chat_text = transcribed_text
         st.session_state.transcribed_text = transcribed_text
 
         st.success("✅ Transcription complete!")
+        # st.rerun()
 else:
     col1, col2 = st.columns(2)
 
@@ -141,6 +152,7 @@ else:
                 st.session_state.transcribed_text = transcribed_text
 
                 st.success("✅ Transcription complete!")
+                st.rerun()
             else:
                 st.warning("Not recording!")
 
