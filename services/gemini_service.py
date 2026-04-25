@@ -3,10 +3,14 @@ import json
 import re
 import google.generativeai as genai
 from dotenv import load_dotenv
+import streamlit as st
+import time
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+api_key = os.getenv("GEMINI_API_KEY") or st.secrets["GEMINI_API_KEY"]
+
+genai.configure(api_key=api_key)
 
 MODEL_NAME = "gemini-3-flash-preview"
 
@@ -92,7 +96,13 @@ def generate_summary(chat_text):
         print("Gemini API = ", number_api_call)
         number_api_call = number_api_call + 1
 
+        start_time = time.time()
         response = model.generate_content(prompt)
+        end_time = time.time()
+
+        response_time = end_time - start_time
+
+        print("Response Time:", response_time, "seconds")
         raw_output = response.text.strip()
 
         try:

@@ -1,0 +1,20 @@
+.env
+.env*.local
+__pycache__/
+htmlcov/
+.pytest_cache/
+mutants/
+.coverage
+gemini_service_backup.py
+
+# Python cache
+*.py[cod]
+
+# Backup files
+*.bak
+
+# Ignore specific init file (if you really don't want it tracked)
+audio_processing/__init__.py
+services/__init__.py
+utils/__init__.py
+tests/__init__.py
